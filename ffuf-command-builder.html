@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ffuf command builder</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 16px; background: #14161a; color: #e6e6e6; }
+  h1 { font-size: 1.3rem; }
+  p.hint { color: #888; font-size: 0.85rem; margin-top: -6px; }
+  label { display: block; margin-top: 14px; font-size: 0.9rem; color: #aaa; }
+  label .flag { color: #6bf; font-family: monospace; font-size: 0.8rem; margin-left: 6px; }
+  input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; background: #1e2126; border: 1px solid #333; color: #eee; border-radius: 4px; box-sizing: border-box; font-family: monospace; font-size: 0.95rem; }
+  input::placeholder, textarea::placeholder { color: #5a5f66; font-style: italic; }
+  textarea { min-height: 50px; resize: vertical; overflow: hidden; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  #postFields { display: none; }
+  #cmdBox { position: sticky; top: 0; z-index: 50; background: #14161a; padding: 14px 0 10px; margin: 0 -16px 16px; padding-left: 16px; padding-right: 16px; border-bottom: 1px solid #2a2d33; }
+  #cmdOutput { background: #0d0f12; border: 1px solid #3a7; padding: 14px; border-radius: 6px; font-family: monospace; font-size: 0.95rem; white-space: pre-wrap; word-break: break-all; min-height: 24px; }
+  button { margin-top: 10px; padding: 10px 18px; background: #3a7; border: none; color: #06110c; font-weight: bold; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+  button:active { transform: translateY(1px); }
+  #copyMsg { color: #6c6; margin-left: 10px; font-size: 0.85rem; }
+  fieldset { border: 1px solid #2a2d33; border-radius: 6px; margin-top: 20px; padding: 4px 14px 14px; }
+  legend { color: #888; font-size: 0.85rem; padding: 0 6px; }
+  .grid-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; align-items: start; }
+  .grid-wrap fieldset, .grid-wrap details { margin-top: 20px; }
+  .info { position: relative; display: inline-flex; margin-left: 6px; vertical-align: middle; }
+  .info-icon { width: 15px; height: 15px; border-radius: 50%; background: #333; color: #9bd; font-size: 0.7rem; font-family: system-ui, sans-serif; font-weight: bold; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+  .info-icon:hover, .info-icon:focus { background: #3a7; color: #06110c; }
+  .info-bubble { display: none; position: absolute; left: 0; top: 22px; z-index: 10; width: 260px; background: #1e2126; border: 1px solid #3a7; border-radius: 6px; padding: 10px 12px; font-size: 0.8rem; font-weight: normal; color: #ccc; line-height: 1.4; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  .info:hover .info-bubble, .info-icon:focus + .info-bubble, .info.open .info-bubble { display: block; }
+</style>
+</head>
+<body>
+  <h1>ffuf command builder</h1>
+  <p class="hint">Fill in the form — the command builds itself below. Copy it into your terminal.</p>
+
+  <div id="cmdBox">
+    <label style="margin-top:0">Command</label>
+    <div id="cmdOutput"></div>
+    <button id="copyBtn">Copy to clipboard</button>
+    <span id="copyMsg"></span>
+  </div>
+
+  <div class="row">
+    <div style="flex: 0 0 100px">
+      <label>Method <span class="flag">-X</span></label>
+      <select id="method">
+        <option>GET</option>
+        <option>POST</option>
+        <option>PUT</option>
+        <option>DELETE</option>
+        <option>HEAD</option>
+      </select>
+    </div>
+    <div style="flex: 0 0 90px">
+      <label>Protocol</label>
+      <select id="protocol">
+        <option value="http">http</option>
+        <option value="https">https</option>
+      </select>
+    </div>
+    <div>
+      <label>Host / IP : port / path <span class="flag">-u</span><span class="info"><span class="info-icon" tabindex="0">i</span><span class="info-bubble">Put the word FUZZ wherever ffuf should substitute wordlist entries — in the path, a query param, a header, or the POST body.</span></span></label>
+      <input autocomplete="off" id="ffufTarget_h9x2" placeholder="10.10.11.5:80/FUZZ" list="hostPresets">
+      <datalist id="hostPresets">
+        <option value="localhost">
+        <option value="localhost:80">
+        <option value="localhost:8080">
+        <option value="$IP">
+        <option value="$IP:$PORT">
+        <option value="$IP:$PORT/FUZZ">
+        <option value="$URL">
+        <option value="127.0.0.1">
+      </datalist>
+    </div>
+  </div>
+
+  <div id="headersPostRow" style="display:flex; flex-wrap:wrap; gap:16px; align-items:start;">
+    <div style="flex:1; min-width:300px;">
+      <label>Headers, one per line <span class="flag">-H</span></label>
+      <select id="commonHeaderPick" style="margin-top:4px;">
+        <option value="">+ Add a common header...</option>
+        <option value="Content-Type: application/x-www-form-urlencoded">Content-Type: form-urlencoded</option>
+        <option value="Content-Type: application/json">Content-Type: JSON</option>
+        <option value="Cookie: session=">Cookie</option>
+        <option value="Authorization: Bearer ">Authorization: Bearer token</option>
+        <option value="User-Agent: Mozilla/5.0">User-Agent</option>
+        <option value="X-Forwarded-For: 127.0.0.1">X-Forwarded-For</option>
+        <option value="X-Forwarded-Host: FUZZ">X-Forwarded-Host</option>
+        <option value="Referer: http://example.com">Referer</option>
+        <option value="X-Api-Key: ">X-Api-Key</option>
+        <option value="Accept: */*">Accept</option>
+      </select>
+      <textarea autocomplete="off" id="headers" placeholder="Content-Type: application/x-www-form-urlencoded&#10;Cookie: session=abc123"></textarea>
+    </div>
+
+    <div id="postFields" style="flex:1; min-width:300px; display:none;">
+      <label>POST body <span class="flag">-d</span></label>
+      <textarea autocomplete="off" id="postBody" placeholder="username=admin&password=FUZZ"></textarea>
+    </div>
+  </div>
+
+  <label>Number of fuzz points<span class="info"><span class="info-icon" tabindex="0">i</span><span class="info-bubble">Each fuzz point gets its own keyword (FUZZ, FUZZ2, FUZZ3...) and wordlist. Use the keyword anywhere — path, POST body, headers.</span></span></label>
+  <select id="fuzzCount">
+    <option value="1">1 — single wordlist</option>
+    <option value="2">2 — two wordlists</option>
+    <option value="3">3 — three wordlists</option>
+    <option value="4">4 — four wordlists</option>
+  </select>
+
+  <datalist id="wordlistPresets">
+    <option value="/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/raft-large-files.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/common.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/big.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-medium.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/web-extensions.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/api/objects.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/graphql.txt">
+    <option value="/usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt">
+    <option value="/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt">
+    <option value="/usr/share/seclists/Discovery/DNS/subdomains-top1million-20000.txt">
+    <option value="/usr/share/seclists/Discovery/DNS/namelist.txt">
+    <option value="/usr/share/seclists/Fuzzing/LFI/LFI-Jhaddix.txt">
+    <option value="/usr/share/seclists/Fuzzing/XSS/XSS-Somdev.txt">
+    <option value="/usr/share/seclists/Fuzzing/SQLi/quick-SQLi.txt">
+    <option value="/usr/share/seclists/Usernames/top-usernames-shortlist.txt">
+    <option value="/usr/share/seclists/Usernames/Names/names.txt">
+    <option value="/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt">
+    <option value="/usr/share/seclists/Passwords/Common-Credentials/top-passwords-shortlist.txt">
+    <option value="/usr/share/seclists/Passwords/darkweb2017-top1000.txt">
+    <option value="/usr/share/wordlists/dirb/common.txt">
+    <option value="/usr/share/wordlists/dirb/big.txt">
+    <option value="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt">
+    <option value="/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt">
+    <option value="/usr/share/wordlists/rockyou.txt">
+    <option value="/usr/share/wordlists/fasttrack.txt">
+    <option value="/usr/share/wordlists/metasploit/unix_users.txt">
+    <option value="/usr/share/wordlists/metasploit/http_default_pass.txt">
+    <option value="/usr/share/wordlists/wfuzz/general/common.txt">
+  </datalist>
+
+  <div id="fuzzPoints"></div>
+
+  <div id="modeField" style="display:none">
+    <label>How should multiple wordlists combine? <span class="flag">-mode</span></label>
+    <select id="mode">
+      <option value="clusterbomb">clusterbomb — try every combination</option>
+      <option value="pitchfork">pitchfork — pair up by line number (same length lists)</option>
+    </select>
+  </div>
+
+
+  <div class="grid-wrap">
+
+  <fieldset>
+    <legend>Filtering / matching (optional, leave blank to skip)<span class="info"><span class="info-icon" tabindex="0">i</span><span class="info-bubble">Size/word filters match exact values, not "less than" or "greater than". Use commas for a few specific values, or a dash for a range (100-200). Handy for filtering out a repeated "not found" page once you know its exact size.</span></span></legend>
+    <div class="row">
+      <div>
+        <label>Filter status codes <span class="flag">-fc</span></label>
+        <input autocomplete="off" id="fc" placeholder="404,403">
+      </div>
+      <div>
+        <label>Match status codes <span class="flag">-mc</span></label>
+        <input autocomplete="off" id="mc" placeholder="200,301,302">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Filter by response size (exact) <span class="flag">-fs</span></label>
+        <input autocomplete="off" id="fs" placeholder="1234">
+      </div>
+      <div>
+        <label>Match by response size (exact) <span class="flag">-ms</span></label>
+        <input autocomplete="off" id="ms" placeholder="1234">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Filter by word count (exact) <span class="flag">-fw</span></label>
+        <input autocomplete="off" id="fw" placeholder="42">
+      </div>
+      <div>
+        <label>Match by word count (exact) <span class="flag">-mw</span></label>
+        <input autocomplete="off" id="mw" placeholder="42">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Filter by line count (exact) <span class="flag">-fl</span></label>
+        <input autocomplete="off" id="fl" placeholder="10">
+      </div>
+      <div>
+        <label>Match by line count (exact) <span class="flag">-ml</span></label>
+        <input autocomplete="off" id="ml" placeholder="10">
+      </div>
+    </div>
+    <label>Match by response time, milliseconds <span class="flag">-mt</span><span class="info"><span class="info-icon" tabindex="0">i</span><span class="info-bubble">Use &gt;100 for slower than 100ms, or &lt;100 for faster than 100ms. Useful for spotting responses that take noticeably longer (a valid username triggering a slower DB lookup).</span></span></label>
+    <input autocomplete="off" id="mt" placeholder=">100 or <100">
+    <div class="row">
+      <div>
+        <label>Filter out if response contains text <span class="flag">-fr</span><span class="info"><span class="info-icon" tabindex="0">i</span><span class="info-bubble">Matches against the response body as a regex. Plain words work fine as-is — just avoid regex special characters like . * ( ) [ ] unless you mean them.</span></span></label>
+        <input autocomplete="off" id="fr" placeholder="No such user">
+      </div>
+      <div>
+        <label>Only keep if response contains text <span class="flag">-mr</span></label>
+        <input autocomplete="off" id="mr" placeholder="Welcome back">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Other options</legend>
+    <label>Cookies <span class="flag">-b</span></label>
+    <input autocomplete="off" id="cookies" placeholder="PHPSESSID=abc123; other=value" list="cookiePresets">
+    <datalist id="cookiePresets">
+      <option value="PHPSESSID=">
+      <option value="JSESSIONID=">
+      <option value="connect.sid=">
+      <option value="laravel_session=">
+      <option value="session=">
+      <option value="auth=">
+    </datalist>
+    <label><input type="checkbox" id="ignoreComments" style="width:auto"> Ignore comment lines in wordlist <span class="flag">-ic</span></label>
+    <label><input type="checkbox" id="colorize" style="width:auto"> Colorize terminal output <span class="flag">-c</span></label>
+    <label><input type="checkbox" id="recursion" style="width:auto"> Recursive scan <span class="flag">-recursion</span></label>
+    <div id="recursionDepthField" style="display:none">
+      <label>Recursion depth (how many levels deep to follow) <span class="flag">-recursion-depth</span></label>
+      <input autocomplete="off" id="recursionDepth" placeholder="2">
+    </div>
+    <label><input type="checkbox" id="followRedirects" style="width:auto"> Follow redirects <span class="flag">-r</span></label>
+    <label>Extensions (comma-separated, no dots) <span class="flag">-e</span></label>
+    <input autocomplete="off" id="extensions" placeholder="php,html,txt">
+    <label>Save output to file <span class="flag">-o</span></label>
+    <input autocomplete="off" id="outfile" placeholder="results.json">
+  </fieldset>
+
+  <details style="margin-top: 20px; border: 1px solid #2a2d33; border-radius: 6px; padding: 4px 14px 14px;">
+    <summary style="cursor: pointer; color: #888; font-size: 0.85rem; padding: 8px 0;">Advanced options</summary>
+
+    <label>Threads <span class="flag">-t</span></label>
+    <input autocomplete="off" id="threads" placeholder="leave blank to use ffuf's default">
+
+    <label>Proxy through Burp (or other) <span class="flag">-x</span></label>
+    <input autocomplete="off" id="proxy" placeholder="http://127.0.0.1:8080">
+
+    <label><input type="checkbox" id="skipSsl" style="width:auto"> Skip SSL certificate check (self-signed certs) <span class="flag">-k</span></label>
+
+    <label>Delay between requests, in seconds <span class="flag">-p</span></label>
+    <input autocomplete="off" id="delay" placeholder="0.5">
+
+    <label>Rate limit, requests per second <span class="flag">-rate</span></label>
+    <input autocomplete="off" id="rate" placeholder="500">
+
+    <label>Request timeout, in seconds <span class="flag">-timeout</span></label>
+    <input autocomplete="off" id="timeout" placeholder="10">
+
+    <label><input type="checkbox" id="verbose" style="width:auto"> Verbose output (full matched URL + redirect location) <span class="flag">-v</span></label>
+
+    <label><input type="checkbox" id="autoCalibrate" style="width:auto"> Auto-calibrate (auto-filter false positives instead of manual -fs/-fw) <span class="flag">-ac</span></label>
+  </details>
+
+  </div>
+
+<script>
+const ids = ['method','threads','protocol','postBody','headers','fc','mc','fs','fw','fr','mr','ms','mw','fl','ml','mt','cookies',
+             'recursion','recursionDepth','followRedirects','extensions','outfile','fuzzCount','mode',
+             'proxy','skipSsl','delay','autoCalibrate','ignoreComments','colorize','rate','timeout','verbose'];
+const els = {};
+ids.forEach(id => els[id] = document.getElementById(id));
+
+// Renamed DOM id to break Chrome's link to old saved autofill history on this field
+els.url = document.getElementById('ffufTarget_h9x2');
+els.url.addEventListener('input', build);
+els.url.addEventListener('change', build);
+
+function shellQuote(s) {
+  // Wrap in single quotes, escape any single quotes inside. Safe for pasting into bash/zsh.
+  if (s === '') return '';
+  if (/^[A-Za-z0-9_\-./:=@,]+$/.test(s)) return s; // no special chars, no quoting needed
+  return "'" + s.replace(/'/g, `'\\''`) + "'";
+}
+
+// Restrict each field to only the characters that flag actually accepts.
+// Strips anything else as you type, rather than letting you build an invalid command.
+const fieldAllowedChars = {
+  fc: /[^0-9,alAL]/g,          // status codes: digits, commas, or a/l (to spell "all")
+  mc: /[^0-9,alAL]/g,
+  fs: /[^0-9,\-]/g,             // sizes: digits, commas, dash for ranges
+  ms: /[^0-9,\-]/g,
+  fw: /[^0-9,\-]/g,             // word counts: same as size
+  mw: /[^0-9,\-]/g,
+  fl: /[^0-9,\-]/g,             // line counts: same
+  ml: /[^0-9,\-]/g,
+  mt: /[^0-9<>]/g,              // response time: digits plus > or <
+  threads: /[^0-9]/g,           // whole number only
+  recursionDepth: /[^0-9]/g,
+  rate: /[^0-9]/g,
+  timeout: /[^0-9.]/g,          // seconds, can be decimal
+  delay: /[^0-9.\-]/g,          // seconds, decimal, or a range like 0.1-0.5
+  extensions: /[^a-zA-Z0-9,]/g, // comma separated extension names, no dots needed
+};
+
+Object.keys(fieldAllowedChars).forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const cleaned = el.value.replace(fieldAllowedChars[id], '');
+    if (cleaned !== el.value) el.value = cleaned;
+  });
+});
+
+function build() {
+  const parts = ['ffuf'];
+
+  let hostPath = els.url.value.trim() || 'TARGET/FUZZ';
+  // if they typed a scheme by habit, strip it — the protocol dropdown wins
+  hostPath = hostPath.replace(/^https?:\/\//i, '');
+  const fullUrl = els.protocol.value + '://' + hostPath;
+  parts.push('-u', shellQuote(fullUrl));
+  const fuzzRows = document.querySelectorAll('#fuzzPoints .row');
+  fuzzRows.forEach(row => {
+    const keyword = row.querySelector('[data-role="keyword"]').value.trim() || 'FUZZ';
+    const wl = row.querySelector('[data-role="wordlist"]').value.trim();
+    if (wl) parts.push('-w', shellQuote(`${wl}:${keyword}`));
+  });
+
+  if (fuzzRows.length > 1) {
+    parts.push('-mode', els.mode.value);
+  }
+  if (els.method.value !== 'GET') parts.push('-X', els.method.value);
+
+  if (els.method.value === 'POST' && els.postBody.value.trim()) {
+    parts.push('-d', shellQuote(els.postBody.value.trim()));
+  }
+
+  els.headers.value.split('\n').map(h => h.trim()).filter(Boolean).forEach(h => {
+    parts.push('-H', shellQuote(h));
+  });
+
+  if (els.cookies.value.trim()) parts.push('-b', shellQuote(els.cookies.value.trim()));
+
+  if (els.fc.value.trim()) parts.push('-fc', els.fc.value.trim());
+  if (els.mc.value.trim()) parts.push('-mc', els.mc.value.trim());
+  if (els.fs.value.trim()) parts.push('-fs', els.fs.value.trim());
+  if (els.fw.value.trim()) parts.push('-fw', els.fw.value.trim());
+  if (els.fr.value.trim()) parts.push('-fr', shellQuote(els.fr.value.trim()));
+  if (els.mr.value.trim()) parts.push('-mr', shellQuote(els.mr.value.trim()));
+  if (els.ms.value.trim()) parts.push('-ms', els.ms.value.trim());
+  if (els.mw.value.trim()) parts.push('-mw', els.mw.value.trim());
+  if (els.fl.value.trim()) parts.push('-fl', els.fl.value.trim());
+  if (els.ml.value.trim()) parts.push('-ml', els.ml.value.trim());
+  if (els.mt.value.trim()) parts.push('-mt', shellQuote(els.mt.value.trim()));
+
+  if (els.extensions.value.trim()) parts.push('-e', els.extensions.value.trim());
+  if (els.recursion.checked) {
+    parts.push('-recursion');
+    if (els.recursionDepth.value.trim()) parts.push('-recursion-depth', els.recursionDepth.value.trim());
+  }
+  if (els.followRedirects.checked) parts.push('-r');
+  if (els.ignoreComments.checked) parts.push('-ic');
+  if (els.colorize.checked) parts.push('-c');
+  if (els.verbose.checked) parts.push('-v');
+
+  if (els.threads.value.trim()) {
+    parts.push('-t', els.threads.value.trim());
+  }
+
+  if (els.outfile.value.trim()) {
+    parts.push('-o', shellQuote(els.outfile.value.trim()), '-of', 'json');
+  }
+
+  if (els.proxy.value.trim()) parts.push('-x', shellQuote(els.proxy.value.trim()));
+  if (els.skipSsl.checked) parts.push('-k');
+  if (els.delay.value.trim()) parts.push('-p', els.delay.value.trim());
+  if (els.rate.value.trim()) parts.push('-rate', els.rate.value.trim());
+  if (els.timeout.value.trim()) parts.push('-timeout', els.timeout.value.trim());
+  if (els.autoCalibrate.checked) parts.push('-ac');
+
+  document.getElementById('cmdOutput').textContent = parts.join(' ');
+}
+
+ids.forEach(id => {
+  els[id].addEventListener('input', build);
+  els[id].addEventListener('change', build);
+});
+
+function renderFuzzPoints() {
+  const count = parseInt(document.getElementById('fuzzCount').value, 10);
+  const container = document.getElementById('fuzzPoints');
+  container.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const keyword = i === 0 ? 'FUZZ' : `FUZZ${i + 1}`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.marginTop = '10px';
+    row.innerHTML = `
+      <div style="flex: 0 0 90px">
+        <label style="margin-top:0">Keyword</label>
+        <input autocomplete="off" value="${keyword}" data-role="keyword" style="text-align:center">
+      </div>
+      <div>
+        <label style="margin-top:0">Wordlist ${i + 1}</label>
+        <input autocomplete="off" placeholder="/path/to/wordlist.txt" list="wordlistPresets" data-role="wordlist">
+      </div>`;
+    container.appendChild(row);
+    row.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', build);
+      inp.addEventListener('change', build);
+    });
+  }
+  document.getElementById('modeField').style.display = count > 1 ? 'block' : 'none';
+  build();
+}
+
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+const headersTa = document.getElementById('headers');
+headersTa.addEventListener('input', () => autoGrow(headersTa));
+autoGrow(headersTa);
+
+document.getElementById('commonHeaderPick').addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (!val) return;
+  const ta = document.getElementById('headers');
+  ta.value = ta.value.trim() ? ta.value.trim() + '\n' + val : val;
+  e.target.value = '';
+  ta.focus();
+  autoGrow(ta);
+  build();
+});
+
+document.getElementById('recursion').addEventListener('change', () => {
+  document.getElementById('recursionDepthField').style.display =
+    document.getElementById('recursion').checked ? 'block' : 'none';
+  build();
+});
+
+document.getElementById('fuzzCount').addEventListener('change', renderFuzzPoints);
+document.getElementById('protocol').addEventListener('change', build);
+
+document.getElementById('method').addEventListener('change', () => {
+  document.getElementById('postFields').style.display =
+    document.getElementById('method').value === 'POST' ? 'block' : 'none';
+  build();
+});
+
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const text = document.getElementById('cmdOutput').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const msg = document.getElementById('copyMsg');
+    msg.textContent = 'Copied!';
+    setTimeout(() => msg.textContent = '', 1500);
+  });
+});
+
+document.querySelectorAll('.info-icon').forEach(icon => {
+  icon.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const bubble = icon.parentElement;
+    const wasOpen = bubble.classList.contains('open');
+    document.querySelectorAll('.info.open').forEach(el => el.classList.remove('open'));
+    if (!wasOpen) bubble.classList.add('open');
+  });
+});
+document.addEventListener('click', () => {
+  document.querySelectorAll('.info.open').forEach(el => el.classList.remove('open'));
+});
+
+renderFuzzPoints();
+</script>
+</body>
+</html>
